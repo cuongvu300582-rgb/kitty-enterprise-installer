@@ -1,6 +1,6 @@
 {
   "name": "kitty-enterprise",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bootstrap installer for Kitty Enterprise",
   "bin": {
     "kitty-enterprise": "bin/kitty-enterprise.js"
