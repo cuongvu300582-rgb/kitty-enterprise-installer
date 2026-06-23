@@ -1,0 +1,17 @@
+{
+  "name": "kitty-enterprise",
+  "version": "0.1.0",
+  "description": "Bootstrap installer for Kitty Enterprise",
+  "bin": {
+    "kitty-enterprise": "bin/kitty-enterprise.js"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "UNLICENSED"
+}
