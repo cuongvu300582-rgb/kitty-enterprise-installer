@@ -29,11 +29,27 @@ Trình khởi dựng và cài đặt tự động tác tử private Kitty trên 
 
 ## Hướng dẫn sử dụng
 
-### 1. Cài đặt gói toàn cục (Global)
-Chạy lệnh cài đặt gói từ npm registry:
-```bash
-npm install -g kitty-enterprise
-```
+### 1. Cài đặt gói (Installation)
+
+Bạn có thể cài đặt toàn cục (Global) hoặc chạy trực tiếp mà không cần cài đặt:
+
+* **Trên Windows:**
+  ```bash
+  npm install -g kitty-enterprise
+  ```
+
+* **Trên Linux / macOS (nếu gặp lỗi phân quyền EACCES):**
+  Sử dụng `sudo` để có quyền cài đặt vào thư mục hệ thống:
+  ```bash
+  sudo npm install -g kitty-enterprise
+  ```
+  *(Lưu ý: Gói cài đặt này hoàn toàn không chạy ngầm hay thực thi mã nguồn tự động khi cài đặt, nên việc chạy với `sudo` là an toàn).*
+
+* **Hoặc chạy trực tiếp không cần cài đặt (Mọi hệ điều hành):**
+  Bạn có thể bỏ qua bước cài đặt toàn cục và khởi chạy trực tiếp thông qua công cụ `npx` đi kèm sẵn với Node.js:
+  ```bash
+  npx kitty-enterprise
+  ```
 
 ### 2. Chạy trình cài đặt
 Sau khi cài đặt xong, chạy lệnh sau ở bất kỳ đâu trong terminal:
