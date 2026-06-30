@@ -69,6 +69,26 @@ if (Test-Path $cloneDir) {
     Write-Host "[WARNING] Directory '$cloneDir' already exists." -ForegroundColor Yellow
     $reply = Read-Host "Would you like to remove the existing '$cloneDir' directory and re-clone? [y/N]"
     if ($reply -match "^[Yy]$") {
+        # 1. Stop any running gateway service to release file locks
+        if (Test-Path "$cloneDir\.venv\Scripts\python.exe") {
+            Write-Host "-> Stopping active Kitty gateway background service..." -ForegroundColor Cyan
+            try {
+                & "$cloneDir\.venv\Scripts\python.exe" -m kitty_cli.main gateway stop | Out-Null
+            } catch {}
+        }
+        
+        # 2. Terminate any remaining processes executing from the target directory
+        Write-Host "-> Checking for active processes in '$cloneDir'..." -ForegroundColor Cyan
+        try {
+            Get-Process | Where-Object { $_.Path -like "$cloneDir*" } | ForEach-Object {
+                Write-Host "   Terminating locking process: $($_.Name) (PID: $($_.Id))" -ForegroundColor Yellow
+                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+            }
+            # Give OS a moment to release file handles
+            Start-Sleep -Seconds 1
+        } catch {}
+
+        Write-Host "-> Removing directory '$cloneDir'..." -ForegroundColor Cyan
         Remove-Item -Recurse -Force $cloneDir
         & git clone git@github.com:cuongvu300582-rgb/Kitty.git $cloneDir
     } else {
