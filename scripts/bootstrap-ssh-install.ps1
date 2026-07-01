@@ -8,6 +8,32 @@ Write-Host ""
 Write-Host "=== Kitty Agent SSH Bootstrapper ===" -ForegroundColor Cyan
 Write-Host "=========================================="
 
+# --- 0. Add npm global directory to PATH if missing -------------------------
+$npmFolder = Join-Path $env:APPDATA "npm"
+try {
+    $prefix = (npm config get prefix).Trim()
+    if (Test-Path $prefix) {
+        $npmFolder = $prefix
+    }
+} catch {}
+
+$userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$npmFolder*") {
+    Write-Host "--> npm global directory not found in User PATH. Adding it..." -ForegroundColor Cyan
+    try {
+        $newUserPath = $userPath.TrimEnd(';') + ";$npmFolder"
+        [System.Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+        $env:PATH = "$env:PATH;$npmFolder"
+        Write-Host "[OK] Added npm global directory to User PATH: $npmFolder" -ForegroundColor Green
+        
+        # Spawn a new PowerShell terminal that has the updated PATH immediately
+        Write-Host "--> Launching a new terminal window with the updated PATH..." -ForegroundColor Cyan
+        Start-Process powershell.exe -ArgumentList "-NoExit", "-Command", "Write-Host 'New terminal session loaded with updated PATH environment variable!' -ForegroundColor Green; Write-Host 'You can now run: kitty-enterprise' -ForegroundColor Cyan"
+    } catch {
+        Write-Warning "Could not automatically add npm global directory to permanent PATH."
+    }
+}
+
 $sshDir = Join-Path $HOME ".ssh"
 $privateKey = Join-Path $sshDir "id_ed25519"
 $publicKey = Join-Path $sshDir "id_ed25519.pub"
@@ -19,10 +45,27 @@ if (-not (Test-Path $privateKey)) {
         New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
     }
     # Run ssh-keygen
-    & ssh-keygen -t ed25519 -C "kitty-agent-bootstrap" -N '""' -f $privateKey
+    $computerName = $env:COMPUTERNAME
+    & ssh-keygen -t ed25519 -C "kitty-enterprise-$computerName" -N '""' -f $privateKey
     Write-Host "[OK] New SSH Key generated." -ForegroundColor Green
 } else {
     Write-Host "[OK] Found existing SSH Key at $privateKey" -ForegroundColor Green
+    
+    # Verify if the existing key's comment needs to be updated
+    $pubKeyContent = Get-Content $publicKey -Raw
+    $expectedComment = "kitty-enterprise-$env:COMPUTERNAME"
+    if ($pubKeyContent -notlike "*$expectedComment*") {
+        Write-Host "--> Updating SSH Key comment to '$expectedComment'..." -ForegroundColor Cyan
+        try {
+            # Secure the private key file permissions first to avoid ssh-keygen bad permissions error
+            $username = "$env:USERDOMAIN\$env:USERNAME"
+            icacls.exe $privateKey /inheritance:r /grant:r "${username}:(F)" | Out-Null
+            & ssh-keygen -c -C $expectedComment -f $privateKey | Out-Null
+            Write-Host "[OK] SSH Key comment updated." -ForegroundColor Green
+        } catch {
+            Write-Warning "Could not automatically update existing SSH Key comment."
+        }
+    }
 }
 
 # --- 2. Prompt User to Add Key to GitHub --------------------------------------
@@ -44,7 +87,10 @@ while ($true) {
     Read-Host "Once you have added the key to GitHub, press [ENTER] to verify..."
     Write-Host "--> Verifying connection to GitHub..." -ForegroundColor Cyan
     
+    $oldEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $ssh_output = & ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1
+    $ErrorActionPreference = $oldEap
     
     # Check if the output contains successfully authenticated
     $strOutput = [string]$ssh_output

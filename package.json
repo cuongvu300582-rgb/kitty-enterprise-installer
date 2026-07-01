@@ -1,11 +1,16 @@
 {
   "name": "kitty-enterprise",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "Global installer for the private Kitty enterprise agent",
   "main": "bin/kitty-enterprise.js",
   "bin": {
     "kitty-enterprise": "bin/kitty-enterprise.js"
   },
+  "files": [
+    "bin",
+    "scripts",
+    "README.md"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

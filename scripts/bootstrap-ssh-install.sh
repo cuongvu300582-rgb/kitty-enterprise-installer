@@ -31,10 +31,24 @@ if [ ! -f "$PRIVATE_KEY" ]; then
     echo -e "${CYAN}→${NC} Generating new Ed25519 SSH Key..."
     mkdir -p "$HOME/.ssh"
     chmod 700 "$HOME/.ssh"
-    ssh-keygen -t ed25519 -C "kitty-agent-bootstrap" -N "" -f "$PRIVATE_KEY"
+    PC_NAME=$(hostname)
+    ssh-keygen -t ed25519 -C "kitty-enterprise-$PC_NAME" -N "" -f "$PRIVATE_KEY"
     echo -e "${GREEN}✓${NC} New SSH Key generated."
 else
     echo -e "${GREEN}✓${NC} Found existing SSH Key at $PRIVATE_KEY"
+    
+    # Verify if the existing key's comment needs to be updated
+    PUB_KEY_CONTENT=$(cat "$PUBLIC_KEY")
+    EXPECTED_COMMENT="kitty-enterprise-$(hostname)"
+    if [[ "$PUB_KEY_CONTENT" != *"$EXPECTED_COMMENT"* ]]; then
+        echo -e "${CYAN}→${NC} Updating SSH Key comment to '$EXPECTED_COMMENT'..."
+        chmod 600 "$PRIVATE_KEY"
+        if ssh-keygen -c -C "$EXPECTED_COMMENT" -f "$PRIVATE_KEY" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} SSH Key comment updated."
+        else
+            echo -e "${YELLOW}⚠ Could not automatically update existing SSH Key comment.${NC}"
+        fi
+    fi
 fi
 
 # --- 2. Start ssh-agent and Add Key ------------------------------------------
