@@ -12,15 +12,18 @@ const isWin = os.platform() === 'win32';
 const scriptName = isWin ? 'bootstrap-ssh-install.ps1' : 'bootstrap-ssh-install.sh';
 const scriptPath = path.join(__dirname, '..', 'scripts', scriptName);
 
+const args = process.argv.slice(2);
+
 let child;
 if (isWin) {
     child = spawn('powershell.exe', [
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
-        '-File', scriptPath
+        '-File', scriptPath,
+        ...args
     ], { stdio: 'inherit' });
 } else {
-    child = spawn('bash', [scriptPath], { stdio: 'inherit' });
+    child = spawn('bash', [scriptPath, ...args], { stdio: 'inherit' });
 }
 
 child.on('exit', (code) => {

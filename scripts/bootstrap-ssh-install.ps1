@@ -1,12 +1,20 @@
 # ============================================================================
 # Kitty Agent SSH Bootstrap Installer (Windows PowerShell)
 # ============================================================================
+param (
+    [switch]$Update
+)
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "=== Kitty Agent SSH Bootstrapper ===" -ForegroundColor Cyan
 Write-Host "=========================================="
+
+$isUpdate = $Update.IsPresent
+if ($args -contains "--update" -or $args -contains "-u" -or $args -contains "update") {
+    $isUpdate = $true
+}
 
 # --- 0. Add npm global directory to PATH if missing -------------------------
 $npmFolder = Join-Path $env:APPDATA "npm"
@@ -106,15 +114,28 @@ while ($true) {
 }
 
 # --- 4. Clone and Launch Main Installer --------------------------------------
-Write-Host ""
-Write-Host "--> Cloning the private repository..." -ForegroundColor Cyan
-
 $cloneDir = Join-Path $HOME "Kitty"
 
+$runUpdateFlag = $false
+
 if (Test-Path $cloneDir) {
-    Write-Host "[WARNING] Directory '$cloneDir' already exists." -ForegroundColor Yellow
-    $reply = Read-Host "Would you like to remove the existing '$cloneDir' directory and re-clone? [y/N]"
-    if ($reply -match "^[Yy]$") {
+    $choice = "1"
+    if (-not $isUpdate) {
+        Write-Host ""
+        Write-Host "[WARNING] Directory '$cloneDir' already exists." -ForegroundColor Yellow
+        Write-Host "Please choose an action:" -ForegroundColor Yellow
+        Write-Host "  1) Update (Pull latest updates, rebuild, and restart services) [Default]" -ForegroundColor Cyan
+        Write-Host "  2) Reinstall (Delete current directory and perform a fresh install)" -ForegroundColor Cyan
+        Write-Host "  3) Cancel" -ForegroundColor Cyan
+        $choiceInput = Read-Host "Enter choice [1-3]"
+        if ($choiceInput -ne "") {
+            $choice = $choiceInput
+        }
+    }
+
+    if ($choice -eq "1") {
+        Write-Host "--> Initiating update for existing installation in '$cloneDir'..." -ForegroundColor Cyan
+        
         # 1. Stop any running gateway service to release file locks
         if (Test-Path "$cloneDir\.venv\Scripts\python.exe") {
             Write-Host "-> Stopping active Kitty gateway background service..." -ForegroundColor Cyan
@@ -123,7 +144,44 @@ if (Test-Path $cloneDir) {
             } catch {}
         }
         
-        # 2. Terminate any remaining processes executing from the target directory
+        # 2. Stop any running dashboard service
+        Write-Host "-> Stopping active Kitty dashboard background service..." -ForegroundColor Cyan
+        try {
+            & schtasks.exe /End /TN "Kitty_Dashboard" 2>$null | Out-Null
+        } catch {}
+
+        # 3. Terminate any remaining processes executing from the target directory
+        Write-Host "-> Checking for active processes in '$cloneDir'..." -ForegroundColor Cyan
+        try {
+            Get-Process | Where-Object { $_.Path -like "$cloneDir*" } | ForEach-Object {
+                Write-Host "   Terminating locking process: $($_.Name) (PID: $($_.Id))" -ForegroundColor Yellow
+                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+            }
+            # Give OS a moment to release file handles
+            Start-Sleep -Seconds 1
+        } catch {}
+
+        Write-Host "-> Pulling latest changes from repository..." -ForegroundColor Cyan
+        Push-Location $cloneDir
+        & git pull
+        Pop-Location
+        $runUpdateFlag = $true
+    } elseif ($choice -eq "2") {
+        # 1. Stop any running gateway service to release file locks
+        if (Test-Path "$cloneDir\.venv\Scripts\python.exe") {
+            Write-Host "-> Stopping active Kitty gateway background service..." -ForegroundColor Cyan
+            try {
+                & "$cloneDir\.venv\Scripts\python.exe" -m kitty_cli.main gateway stop | Out-Null
+            } catch {}
+        }
+        
+        # 2. Stop any running dashboard service
+        Write-Host "-> Stopping active Kitty dashboard background service..." -ForegroundColor Cyan
+        try {
+            & schtasks.exe /End /TN "Kitty_Dashboard" 2>$null | Out-Null
+        } catch {}
+
+        # 3. Terminate any remaining processes executing from the target directory
         Write-Host "-> Checking for active processes in '$cloneDir'..." -ForegroundColor Cyan
         try {
             Get-Process | Where-Object { $_.Path -like "$cloneDir*" } | ForEach-Object {
@@ -136,21 +194,35 @@ if (Test-Path $cloneDir) {
 
         Write-Host "-> Removing directory '$cloneDir'..." -ForegroundColor Cyan
         Remove-Item -Recurse -Force $cloneDir
+        Write-Host "-> Cloning the private repository..." -ForegroundColor Cyan
         & git clone git@github.com:cuongvu300582-rgb/Kitty.git $cloneDir
     } else {
-        Write-Host "Proceeding with the existing '$cloneDir' directory and pulling latest changes..." -ForegroundColor Yellow
-        Push-Location $cloneDir
-        & git pull
-        Pop-Location
+        Write-Host "Operation cancelled. Exiting." -ForegroundColor Yellow
+        Exit 0
     }
 } else {
+    Write-Host "--> Cloning the private repository..." -ForegroundColor Cyan
     & git clone git@github.com:cuongvu300582-rgb/Kitty.git $cloneDir
 }
 
 if (Test-Path $cloneDir) {
     Set-Location $cloneDir
-    Write-Host "--> Launching setup-kitty.ps1..." -ForegroundColor Cyan
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-kitty.ps1
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Host "====================================================" -ForegroundColor Red
+        Write-Host "[ERROR] Administrator privileges are required to run setup-kitty.ps1." -ForegroundColor Red
+        Write-Host "Please run your terminal (PowerShell/CMD) as Administrator and run the command again." -ForegroundColor Red
+        Write-Host "====================================================" -ForegroundColor Red
+        Exit 1
+    }
+
+    if ($runUpdateFlag) {
+        Write-Host "--> Launching setup-kitty.ps1 in Update mode..." -ForegroundColor Cyan
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-kitty.ps1 -Update
+    } else {
+        Write-Host "--> Launching setup-kitty.ps1..." -ForegroundColor Cyan
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-kitty.ps1
+    }
 } else {
     Write-Host "[ERROR] Failed to clone repository. Exiting." -ForegroundColor Red
     Exit 1

@@ -12,6 +12,13 @@
 
 set -e
 
+IS_UPDATE=false
+for arg in "$@"; do
+    if [ "$arg" = "--update" ] || [ "$arg" = "-u" ] || [ "$arg" = "update" ]; then
+        IS_UPDATE=true
+    fi
+done
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -94,40 +101,70 @@ while true; do
 done
 
 # --- 5. Clone and Launch Main Installer --------------------------------------
-echo ""
-echo -e "${CYAN}→${NC} Cloning the private repository..."
-
 CLONE_DIR="$HOME/Kitty"
 
+RUN_UPDATE_FLAG=false
+
 if [ -d "$CLONE_DIR" ]; then
-    echo -e "${YELLOW}⚠ Directory '$CLONE_DIR' already exists.${NC}"
-    if ! read -p "Would you like to remove the existing '$CLONE_DIR' directory and re-clone? [y/N] " -n 1 -r; then
-        echo
-        echo -e "${YELLOW}Input closed. Proceeding with existing '$CLONE_DIR' directory and pulling latest changes...${NC}"
+    CHOICE="1"
+    if [ "$IS_UPDATE" = "false" ]; then
+        echo ""
+        echo -e "${YELLOW}⚠ Directory '$CLONE_DIR' already exists.${NC}"
+        echo -e "Please choose an action:"
+        echo -e "  1) Update (Pull latest updates, rebuild, and restart services) [Default]"
+        echo -e "  2) Reinstall (Delete current directory and perform a fresh install)"
+        echo -e "  3) Cancel"
+        read -p "Enter choice [1-3]: " CHOICE_INPUT
+        if [ -n "$CHOICE_INPUT" ]; then
+            CHOICE="$CHOICE_INPUT"
+        fi
+    fi
+
+    if [ "$CHOICE" = "1" ]; then
+        echo -e "${CYAN}→${NC} Initiating update for existing installation in '$CLONE_DIR'..."
+        
+        # Stop gateway service if active
+        if [ -f "$CLONE_DIR/.venv/bin/python" ]; then
+            echo -e "${CYAN}→${NC} Stopping active Kitty gateway background service..."
+            "$CLONE_DIR/.venv/bin/python" -m kitty_cli.main gateway stop || true
+        fi
+        
+        echo -e "${CYAN}→${NC} Pulling latest changes from repository..."
         cd "$CLONE_DIR"
         git pull
         cd - > /dev/null
-    else
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            rm -rf "$CLONE_DIR"
-            git clone git@github.com:cuongvu300582-rgb/Kitty.git "$CLONE_DIR"
-        else
-            echo -e "${YELLOW}Proceeding with the existing '$CLONE_DIR' directory and pulling latest changes...${NC}"
-            cd "$CLONE_DIR"
-            git pull
-            cd - > /dev/null
+        RUN_UPDATE_FLAG=true
+    elif [ "$CHOICE" = "2" ]; then
+        # Stop gateway service if active
+        if [ -f "$CLONE_DIR/.venv/bin/python" ]; then
+            echo -e "${CYAN}→${NC} Stopping active Kitty gateway background service..."
+            "$CLONE_DIR/.venv/bin/python" -m kitty_cli.main gateway stop || true
         fi
+        
+        echo -e "${CYAN}→${NC} Removing directory '$CLONE_DIR'..."
+        rm -rf "$CLONE_DIR"
+        echo -e "${CYAN}→${NC} Cloning the private repository..."
+        git clone git@github.com:cuongvu300582-rgb/Kitty.git "$CLONE_DIR"
+    else
+        echo -e "${YELLOW}Operation cancelled. Exiting.${NC}"
+        exit 0
     fi
 else
+    echo -e "${CYAN}→${NC} Cloning the private repository..."
     git clone git@github.com:cuongvu300582-rgb/Kitty.git "$CLONE_DIR"
 fi
 
 if [ -d "$CLONE_DIR" ]; then
     cd "$CLONE_DIR"
-    echo -e "${CYAN}→${NC} Launching setup-kitty.sh..."
-    chmod +x setup-kitty.sh
-    ./setup-kitty.sh
+    if [ "$RUN_UPDATE_FLAG" = "true" ]; then
+        echo -e "${CYAN}→${NC} Launching setup-kitty.sh in Update mode..."
+        chmod +x setup-kitty.sh
+        ./setup-kitty.sh --update
+    else
+        echo -e "${CYAN}→${NC} Launching setup-kitty.sh..."
+        chmod +x setup-kitty.sh
+        ./setup-kitty.sh
+    fi
 else
     echo -e "${RED}✗ Failed to clone repository. Exiting.${NC}"
     exit 1
